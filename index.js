@@ -9,6 +9,7 @@ const { connection } = require("./db");
 const { UserModel } = require("./models/userModel");
 const { ProductModel } = require("./models/productModel");
 const { AddToCartModel } = require("./models/addToCart");
+const { WishListModel } = require("./models/wishlist");
 
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -147,6 +148,60 @@ app.post("/addToCart", async (req, res) => {
     res.json(newaddToCart);
   }
 });
+app.post("/wishlist", async (req, res) => {
+  const { productId, quantity } = req.body;
+  const userId = req.userId;
+
+  if (!productId || !quantity || !userId) {
+    return res.json({ error: "All required fields must be provided" });
+  }
+
+  const newWishList = new WishListModel({
+    productId,
+    userId,
+    quantity,
+  });
+
+  const ExistingWishList = await WishListModel.findOne({
+    productId,
+  });
+  if (ExistingWishList) {
+    res.status(300).json({
+      message: "Product is already in wishlist",
+    });
+  } else {
+    await newWishList.save();
+    res.status(200).json(newWishList);
+  }
+});
+app.get("/wishlist", async (req, res) => {
+  const userId = req.userId;
+
+  const wishlistItems = await WishListModel.find({
+    userId,
+  }).populate("productId");
+
+  const productsInWishlist = wishlistItems.map((item) => ({
+    id: item.productId._id,
+    name: item.productId.name,
+    price: item.productId.price,
+    pack: item.productId.pack,
+    description: item.productId.description,
+    category: item.productId.category,
+    img: item.productId.img,
+    discounted_price: item.productId.discounted_price,
+
+    // other product details
+  }));
+
+  if (!wishlistItems) {
+    res.status(300).json({
+      message: "No products in wishlist",
+    });
+  } else {
+    res.status(200).json(productsInWishlist);
+  }
+});
 
 app.put("/products/:productID", async (req, res) => {
   try {
@@ -174,7 +229,6 @@ app.delete("/products/:productID", async (req, res) => {
   try {
     const productId = req.params.productID;
     const deletedProduct = await ProductModel.findByIdAndDelete(productId);
-    
 
     if (!deletedProduct) {
       return res.json({ error: "Product not found" });
